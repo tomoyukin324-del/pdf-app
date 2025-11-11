@@ -1,13 +1,22 @@
-const { GoogleSpreadsheet } = require('google-spreadsheet');
+// netlify/functions/find-pdf.js
 
-const creds = {
-  client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-};
+// 新しいバージョンのライブラリに対応したインポート方法
+import { GoogleSpreadsheet } from 'google-spreadsheet';
+import { JWT } from 'google-auth-library';
+
+// 環境変数から認証情報を取得
+const serviceAccountAuth = new JWT({
+  email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+  key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  scopes: [
+    'https://www.googleapis.com/auth/spreadsheets',
+  ],
+});
+
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const SHEET_NAME = 'ID管理'; // あなたのスプレッドシートのシート名
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   // スプレッドシートの1行目のヘッダーは "ID" と "URL" になっている必要があります
   const ID_COLUMN_HEADER = 'ID';
   const URL_COLUMN_HEADER = 'URL';
@@ -19,20 +28,19 @@ exports.handler = async (event) => {
   }
 
   try {
-    const doc = new GoogleSpreadsheet(SPREADSHEET_ID);
-    await doc.useServiceAccountAuth(creds);
-    await doc.loadInfo();
+    const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+    await doc.loadInfo(); // loads document properties and worksheets
 
     const sheet = doc.sheetsByTitle[SHEET_NAME];
     if (!sheet) throw new Error(`Sheet "${SHEET_NAME}" not found.`);
     
     const rows = await sheet.getRows();
-    const foundRow = rows.find(row => row[ID_COLUMN_HEADER] && row[ID_COLUMN_HEADER].toString() === id.toString());
+    const foundRow = rows.find(row => row.get(ID_COLUMN_HEADER) && row.get(ID_COLUMN_HEADER).toString() === id.toString());
 
-    if (foundRow && foundRow[URL_COLUMN_HEADER]) {
+    if (foundRow && foundRow.get(URL_COLUMN_HEADER)) {
       return {
         statusCode: 200,
-        body: JSON.stringify({ url: foundRow[URL_COLUMN_HEADER] }),
+        body: JSON.stringify({ url: foundRow.get(URL_COLUMN_HEADER) }),
       };
     } else {
       return {
